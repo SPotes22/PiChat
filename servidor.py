@@ -114,7 +114,9 @@ def load_user(user_id):
     return None
 
 # --- RUTAS WEB (VISTAS) ---
-
+@app.get("/")
+def root():
+    return {"status": "ok"}
 @app.route('/')
 def home():
     return redirect(url_for('login'))
