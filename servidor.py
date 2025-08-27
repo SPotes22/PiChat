@@ -25,7 +25,8 @@ from flask_socketio import SocketIO, join_room, leave_room, send
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from flask_argon2 import Argon2
-import os
+import os,json
+from argon2 import PasswordHasher
 
 # --- CONFIGURACIÓN INICIAL ---
 app = Flask(__name__)
@@ -41,11 +42,61 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # En un entorno de producción, las contraseñas nunca deben estar hardcodeadas.
 # Se generan hashes para las contraseñas por defecto.
+'''
 usuarios = {
     'admin': {'password': argon2.generate_password_hash('admin123'), 'rol': 'administrator'},
     'cliente': {'password': argon2.generate_password_hash('cliente123'), 'rol': 'cliente'},
     'usuario': {'password': argon2.generate_password_hash('usuario123'), 'rol': 'usuario'},
 }
+'''
+#import os, json
+#from argon2 import PasswordHasher
+
+ph = PasswordHasher()
+
+# Diccionario inicial con los 3 base
+users = {
+    os.getenv("ADMIN_USER", "admin"): {
+        "password": ph.hash(os.getenv("ADMIN_PASS", "admin123")),
+        "role": "administrator"
+    },
+    os.getenv("CLIENT_USER", "cliente"): {
+        "password": ph.hash(os.getenv("CLIENT_PASS", "cliente123")),
+        "role": "cliente"
+    },
+    os.getenv("USR_USER", "usuario"): {
+        "password": ph.hash(os.getenv("USR_PASS", "usuario123")),
+        "role": "usuario"
+    }
+}
+
+# Cargar DEMO_USERS desde variable de entorno
+demo_users_env = os.getenv("DEMO_USERS", "[]")
+# import os, json
+
+demo_users = json.loads(os.getenv("DEMO_USERS", "[]"))
+try:
+    for user in demo_users:
+        print("Cargando usuario demo:", user["username"], "rol:", user["role"])
+        demo_users = json.loads(demo_users_env)
+        for u in demo_users:
+            users[u["username"]] = {
+                "password": ph.hash(u["password"]),
+                "role": u.get("role", u['role'])
+            }
+except Exception as e:
+    print(f"[WARN] No se pudieron cargar demo_users: {e}")
+
+'''try:
+    demo_users = json.loads(demo_users_env)
+    for u in demo_users:
+        users[u["username"]] = {
+            "password": ph.hash(u["password"]),
+            "role": u.get("role", "usuario")
+        }
+except Exception as e:
+    print(f"[WARN] No se pudieron cargar demo_users: {e}")
+'''
 
 # --- GESTIÓN DE LOGIN Y USUARIOS ---
 login_manager = LoginManager(app)
