@@ -282,3 +282,5 @@ if __name__ == '__main__':
     # El puerto 8000 es el principal. Otros servicios podrían correr en otros puertos
     # usando el concepto de 'administrador_hilos.py' si fuera necesario.
     socketio.run(app, host='0.0.0.0', port=8000, debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
