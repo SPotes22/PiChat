@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Subir Archivo - MicroNAS</title>
+    <style>
+         body { font-family: sans-serif; margin: 0; display: flex; height: 100vh; }
+        .sidebar { width: 200px; background: #2f3136; color: white; padding: 20px; }
+        .sidebar a { color: #b9bbbe; text-decoration: none; display: block; padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+        .sidebar a:hover { background: #393c43; }
+        .content { flex-grow: 1; padding: 20px; background: #f8f9fa; display: flex; justify-content: center; align-items: center; }
+        .upload-box { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+        .upload-box input[type="file"] { border: 2px dashed #007bff; padding: 30px; border-radius: 5px; cursor: pointer; }
+        .upload-box button { margin-top: 20px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>PiChat MVP</h2>
+        <a href="{{ url_for('inicio') }}">🏠 Inicio</a>
+        <a href="{{ url_for('chat') }}">💬 Chat</a>
+        <a href="{{ url_for('listar') }}">📁 Listar Archivos</a>
+        <a href="{{ url_for('subir') }}">⬆️ Subir Archivo</a>
+    </div>
+    <div class="content">
+        <div class="upload-box">
+             <h2>Subir Archivo a Cuarentena</h2>
+             <p>Los archivos serán revisados antes de ser procesados.</p>
+             <form method="post" enctype="multipart/form-data">
+                <input type="file" name="archivo" required>
+                <br>
+                <button type="submit">Subir Archivo</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

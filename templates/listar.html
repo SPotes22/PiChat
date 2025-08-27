@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Archivos - MicroNAS</title>
+    <style>
+        body { font-family: sans-serif; margin: 0; display: flex; height: 100vh; }
+        .sidebar { width: 200px; background: #2f3136; color: white; padding: 20px; }
+        .sidebar a { color: #b9bbbe; text-decoration: none; display: block; padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+        .sidebar a:hover { background: #393c43; }
+        .content { flex-grow: 1; padding: 20px; background: #f8f9fa; }
+        ul { list-style: none; padding: 0; }
+        li { background: white; margin-bottom: 10px; padding: 15px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .actions a { margin-left: 10px; text-decoration: none; padding: 5px 10px; border-radius: 3px; }
+        .download { background: #28a745; color: white; }
+        .delete { background: #dc3545; color: white; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>PiChat MVP</h2>
+        <a href="{{ url_for('inicio') }}">🏠 Inicio</a>
+        <a href="{{ url_for('chat') }}">💬 Chat</a>
+        <a href="{{ url_for('listar') }}">📁 Listar Archivos</a>
+        {% if current_user.rol != 'usuario' %}
+        <a href="{{ url_for('subir') }}">⬆️ Subir Archivo</a>
+        {% endif %}
+    </div>
+    <div class="content">
+        <h1>Archivos en Cuarentena</h1>
+        <ul>
+            {% for archivo in archivos %}
+            <li>
+                <span>{{ archivo }}</span>
+                <div class="actions">
+                    <a href="/descargar/{{ archivo }}" class="download">Descargar</a>
+                    {% if current_user.rol == 'administrator' %}
+                    <a href="/eliminar/{{ archivo }}" class="delete" onclick="return confirm('¿Estás seguro?')">Eliminar</a>
+                    {% endif %}
+                </div>
+            </li>
+            {% else %}
+            <li>No hay archivos aún.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>
