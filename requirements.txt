@@ -31,4 +31,4 @@ uvicorn[standard]
 gunicorn
 argon2-cffi
 python-dotenv
-
+eventlet
