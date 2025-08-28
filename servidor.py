@@ -19,46 +19,27 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 '''
-
 from flask import Flask, request, jsonify, redirect, url_for, send_from_directory, render_template
 from flask_socketio import SocketIO, join_room, leave_room, send
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from flask_argon2 import Argon2
-import os,json
+import os, json
 from argon2 import PasswordHasher
 
 # --- CONFIGURACIÓN INICIAL ---
 app = Flask(__name__)
-#socketio = SocketIO(app, async_mode="eventlet")
-socketio = SocketIO(app, cors_allowed_origins="*")  # este es el server real
-
-
-# Se recomienda usar una variable de entorno para la clave secreta
+socketio = SocketIO(app, cors_allowed_origins="*")  # SocketIO envuelve a Flask
 app.secret_key = os.environ.get("SECRET_KEY", "a-very-secret-key-for-dev") 
 argon2 = Argon2(app)
-#socketio = SocketIO(app)
+ph = PasswordHasher()
 
-# --- CONFIGURACIÓN DE CARPETAS Y USUARIOS ---
+# --- CONFIGURACIÓN DE CARPETAS ---
 UPLOAD_FOLDER = './cuarentena'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# En un entorno de producción, las contraseñas nunca deben estar hardcodeadas.
-# Se generan hashes para las contraseñas por defecto.
-'''
-usuarios = {
-    'admin': {'password': argon2.generate_password_hash('admin123'), 'rol': 'administrator'},
-    'cliente': {'password': argon2.generate_password_hash('cliente123'), 'rol': 'cliente'},
-    'usuario': {'password': argon2.generate_password_hash('usuario123'), 'rol': 'usuario'},
-}
-'''
-#import os, json
-#from argon2 import PasswordHasher
-
-ph = PasswordHasher()
-
-# Diccionario inicial con los 3 base
+# --- USUARIOS BASE ---
 users = {
     os.getenv("ADMIN_USER", "admin"): {
         "password": ph.hash(os.getenv("ADMIN_PASS", "admin123")),
@@ -74,24 +55,9 @@ users = {
     }
 }
 
-# Cargar DEMO_USERS desde variable de entorno
-demo_users_env = os.getenv("DEMO_USERS", "[]")
-# import os, json
-
-demo_users = json.loads(os.getenv("DEMO_USERS", "[]"))
+# --- DEMO USERS DESDE ENV ---
 try:
-    for user in demo_users:
-        print("Cargando usuario demo:", user["username"], "rol:", user["role"])
-        demo_users = json.loads(demo_users_env)
-        for u in demo_users:
-            users[u["username"]] = {
-                "password": ph.hash(u["password"]),
-                "role": u.get("role", u['role'])
-            }
-except Exception as e:
-    print(f"[WARN] No se pudieron cargar demo_users: {e}")
-
-'''try:
+    demo_users_env = os.getenv("DEMO_USERS", "[]")
     demo_users = json.loads(demo_users_env)
     for u in demo_users:
         users[u["username"]] = {
@@ -100,29 +66,27 @@ except Exception as e:
         }
 except Exception as e:
     print(f"[WARN] No se pudieron cargar demo_users: {e}")
-'''
 
-# --- GESTIÓN DE LOGIN Y USUARIOS ---
+# --- LOGIN MANAGER ---
 login_manager = LoginManager(app)
-login_manager.login_view = 'login' # Redirige a /login si no está autenticado
+login_manager.login_view = 'login'
 
 class Usuario(UserMixin):
-    def __init__(self, username):
+    def __init__(self, username, role):
         self.id = username
-        self.rol = usuarios[username]['rol']
+        self.rol = role
 
 @login_manager.user_loader
 def load_user(user_id):
-    if user_id in usuarios:
-        return Usuario(user_id)
+    if user_id in users:
+        return Usuario(user_id, users[user_id]['role'])
     return None
 
-# --- RUTAS WEB (VISTAS) ---
-@app.get("/")
-def root():
-    return {"status": "ok"}
+# --- RUTAS ---
 @app.route('/')
 def home():
+    if current_user.is_authenticated:
+        return redirect(url_for('inicio'))
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -132,9 +96,13 @@ def login():
     if request.method == 'POST':
         user = request.form['usuario']
         password = request.form['clave']
-        if user in usuarios and argon2.check_password_hash(usuarios[user]['password'], password):
-            login_user(Usuario(user))
-            return redirect(url_for('inicio'))
+        if user in users:
+            try:
+                ph.verify(users[user]['password'], password)
+                login_user(Usuario(user, users[user]['role']))
+                return redirect(url_for('inicio'))
+            except Exception:
+                pass
         return render_template("login.html", error="Credenciales inválidas.")
     return render_template("login.html")
 
@@ -149,8 +117,7 @@ def logout():
 def inicio():
     return render_template('inicio.html', current_user=current_user)
 
-# --- FUNCIONALIDAD DE ARCHIVOS (MicroNAS) ---
-
+# --- FUNCIONALIDAD DE ARCHIVOS ---
 @app.route('/subir', methods=['GET', 'POST'])
 @login_required
 def subir():
@@ -162,8 +129,6 @@ def subir():
         archivo = request.files['archivo']
         if archivo.filename == '':
             return 'No se seleccionó ningún archivo', 400
-        # Audit file -> I only trust UTF-8 (Concepto)
-        # Aquí iría la lógica para validar el tipo de archivo antes de guardarlo.
         filename = secure_filename(archivo.filename)
         archivo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         return redirect(url_for('listar'))
@@ -188,112 +153,53 @@ def eliminar(nombre):
     try:
         os.remove(os.path.join(UPLOAD_FOLDER, secure_filename(nombre)))
     except FileNotFoundError:
-        pass # Ignorar si el archivo no existe
+        pass
     return redirect(url_for('listar'))
 
-# --- RUTA PARA LA INTERFAZ DEL CHAT ---
 @app.route('/chat')
 @login_required
 def chat():
     return render_template('chat.html', current_user=current_user)
 
-
-# --- LÓGICA DEL SERVIDOR DE CHAT CON SOCKET.IO ---
-
-# Almacenamiento en memoria para las salas y contraseñas (MVP)
-# En un sistema real, esto debería estar en una base de datos.
-chat_rooms = {} 
+# --- SOCKET.IO ---
+chat_rooms = {}
 
 @socketio.on('join')
 def on_join(data):
-    """
-    Unirse a una sala de chat.
-    """
     username = current_user.id
     room_code = data['room']
     password = data['password']
     is_group = data.get('is_group', False)
     
-    # Lógica de "candado" y contraseña
     if room_code not in chat_rooms:
         chat_rooms[room_code] = argon2.generate_password_hash(password)
-        room_owner = True
     else:
-        room_owner = False
         if not argon2.check_password_hash(chat_rooms[room_code], password):
-            send({'msg': 'Contraseña de la sala incorrecta.', 'type': 'error'})
+            send({'msg': 'Contraseña incorrecta.', 'type': 'error'})
             return
 
     join_room(room_code)
-    
-    # Notificar a la sala que un nuevo usuario se ha unido
-    message_data = {
-        'msg': f"👋 {username} se ha unido a la sala.",
-        'user': 'Servidor',
-        'is_group': is_group
-    }
-    send(message_data, to=room_code)
-
+    send({'msg': f"👋 {username} se ha unido.", 'user': 'Servidor', 'is_group': is_group}, to=room_code)
 
 @socketio.on('leave')
 def on_leave(data):
-    """
-    Salir de una sala de chat.
-    """
     username = current_user.id
     room_code = data['room']
-    is_group = data.get('is_group', False)
-
     leave_room(room_code)
-    
-    message_data = {
-        'msg': f"🚪 {username} ha salido de la sala.",
-        'user': 'Servidor',
-        'is_group': is_group
-    }
-    send(message_data, to=room_code)
-
+    send({'msg': f"🚪 {username} ha salido.", 'user': 'Servidor'}, to=room_code)
 
 @socketio.on('message')
 def handle_message(data):
-    """
-    Recibir y reenviar mensajes.
-    """
     username = current_user.id
     room = data['room']
-    message = data['msg']
+    msg = data['msg']
     is_group = data.get('is_group', False)
-    
-    # No guardar mensajes si es un chat grupal
-    if is_group:
-        # El mensaje es efímero, solo se reenvía
-        pass
-    else:
-        # Aquí iría la lógica para guardar el mensaje en una base de datos o archivo
-        # Para el MVP, simplemente lo reenviamos.
-        pass
-        
-    response_data = {
-        'msg': message,
-        'user': username,
-        'is_group': is_group
-    }
-    
-    send(response_data, to=room)
+    send({'msg': msg, 'user': username, 'is_group': is_group}, to=room)
 
-
-# --- INICIO DE LA APLICACIÓN ---
+# --- INICIO ---
 if __name__ == '__main__':
-    # Usar host='0.0.0.0' para que sea accesible en la red local.
-    # El puerto 8000 es el principal. Otros servicios podrían correr en otros puertos
-    # usando el concepto de 'administrador_hilos.py' si fuera necesario.
     port = int(os.environ.get("PORT", 8080))
     socketio.run(app, host='0.0.0.0', port=port)
 
-# 👇 agregado: esto es para gunicorn
-# le damos un alias 'app' que apunta a socketio
-#app = socketio
-socketio = SocketIO(app, async_mode="eventlet")
-application = socketio  # Gunicorn usará esto
-
-
+# 👉 Para gunicorn/render
+application = app
