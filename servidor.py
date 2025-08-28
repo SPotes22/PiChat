@@ -19,68 +19,114 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 '''
+import os
+import json
+from datetime import timedelta
+from urllib.parse import urlparse
+
 from flask import Flask, request, jsonify, redirect, url_for, send_from_directory, render_template
 from flask_socketio import SocketIO, join_room, leave_room, send
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from flask_argon2 import Argon2
-import os, json
 from argon2 import PasswordHasher
 import logging
 from logging.handlers import RotatingFileHandler
-from datetime import timedelta
 from flask_talisman import Talisman
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import bleach
 from flask_wtf import CSRFProtect
 
+# ---------------------------
+# Utiles para sanitizar / orígenes
+# ---------------------------
+def normalize_origin(o: str):
+    if not o:
+        return None
+    o = o.strip()
+    # quitar path si lo puso (p.ej. "https://mi.app/chat")
+    if '://' not in o:
+        # permitir que pasen dominios sin esquema
+        o = 'https://' + o
+    parsed = urlparse(o)
+    netloc = parsed.netloc or parsed.path
+    scheme = parsed.scheme or 'https'
+    return f"{scheme}://{netloc}"
 
-# --- CONFIGURACIÓN INICIAL ---
-
-ALLOWED_TAGS = []           # sin HTML permitido
+# ---------------------------
+# CONFIG INICIAL
+# ---------------------------
+ALLOWED_TAGS = []
 ALLOWED_ATTRS = {}
 ALLOWED_PROTOCOLS = ['http', 'https']
 
 app = Flask(__name__)
-#CSRFProtect(app)
+app.secret_key = os.environ.get("SECRET_KEY", "dev_secret")
 
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE=None,   # importante para que cookies se envíen con websocket handshakes cross-site
+    REMEMBER_COOKIE_HTTPONLY=True,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+    MAX_CONTENT_LENGTH=25 * 1024 * 1024,
+)
+
+# ---------------------------
+# ALLOWED ORIGINS: parsear desde env para no hardcodear paths
+# ---------------------------
+_default_origins = "https://pichat-k0bi.onrender.com,https://*.railway.app,http://localhost:5000"
+origins_env = os.environ.get("ALLOWED_ORIGINS", _default_origins)
+ALLOWED_ORIGINS = []
+for part in origins_env.split(","):
+    n = normalize_origin(part)
+    if n:
+        ALLOWED_ORIGINS.append(n)
+
+# socketio: allow the parsed origins (no paths)
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS, manage_session=False)
+
+# ---------------------------
+# CSRF: init y EXEMPT para socketio (handshake)
+# ---------------------------
 csrf = CSRFProtect()
 csrf.init_app(app)
 
-# Excluir sockets del CSRF
-csrf.exempt(socketio_app)
+# intentamos eximir SocketIO del CSRF (lo ideal es eximir la ruta /socket.io)
+# Si no funcionara por alguna razón, el try/except evita romper el boot.
+try:
+    csrf.exempt(socketio)  # normalmente esto evita que flask-wtf valide el handshake
+except Exception:
+    try:
+        csrf.exempt('socketio')
+    except Exception:
+        pass
 
-#socketio = SocketIO(app, cors_allowed_origins="*")  # SocketIO envuelve a Flask
-app.secret_key = os.environ.get("SECRET_KEY") 
+# ---------------------------
+# TALISMAN / CSP: construir connect-src dinámicamente a partir de ALLOWED_ORIGINS
+# ---------------------------
+wss_origins = []
+for o in ALLOWED_ORIGINS:
+    if o.startswith("https://"):
+        wss_origins.append(o.replace("https://", "wss://"))
+    elif o.startswith("http://"):
+        wss_origins.append(o.replace("http://", "ws://"))
+    else:
+        wss_origins.append(o)
 
-app.config.update(
-    SESSION_COOKIE_SECURE=True,       # solo por HTTPS
-    SESSION_COOKIE_HTTPONLY=True,     # no accesible por JS
-    SESSION_COOKIE_SAMESITE=None,    # o "Strict" si no integras con otros dominios
-    REMEMBER_COOKIE_HTTPONLY=True,
-    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
-    MAX_CONTENT_LENGTH=25 * 1024 * 1024,  # 25MB uploads
-)
+connect_src_value = "'self'"
+if wss_origins:
+    connect_src_value += " " + " ".join(wss_origins)
 
-# Limitar orígenes del socket (quitar el "*")
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "https://pichat-k0bi.onrender.com/chat").split(",")
-socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)  # evita CSRF en websockets
-
-
-argon2 = Argon2(app)
-ph = PasswordHasher()
-
-# Content Security Policy estricta (ajústala a tus assets/CDNs reales)
 csp = {
     'default-src': "'self'",
     'img-src': "'self' data:",
-    'style-src': "'self' 'unsafe-inline'",   # mejor sin 'unsafe-inline' si usas sólo archivos .css
-    'script-src': "'self'",                   # sin inline scripts
-    'connect-src': "'self' wss://pichat-k0bi.onrender.com",
+    'style-src': "'self' 'unsafe-inline'",
+    'script-src': "'self'",
+    'connect-src': connect_src_value,
 }
 
-# Fuerza HTTPS + headers seguros
 Talisman(
     app,
     content_security_policy=csp,
@@ -93,15 +139,29 @@ Talisman(
     content_security_policy_nonce_in=['script-src'],
 )
 
-# Rate limiting global y por endpoint
+# ---------------------------
+# RATE LIMITER
+# ---------------------------
 limiter = Limiter(get_remote_address, app=app, default_limits=["200 per minute"])
 
-# --- CONFIGURACIÓN DE CARPETAS ---
+# ---------------------------
+# ARCHIVOS / UPLOAD
+# ---------------------------
 UPLOAD_FOLDER = './cuarentena'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+ALLOWED_EXTENSIONS = {'.txt', '.pdf', '.png', '.jpg', '.jpeg', '.gif'}
 
-# --- USUARIOS BASE ---
+def allowed_file(filename: str) -> bool:
+    _, ext = os.path.splitext(filename.lower())
+    return ext in ALLOWED_EXTENSIONS
+
+# ---------------------------
+# AUTH / USERS (demo)
+# ---------------------------
+argon2 = Argon2(app)
+ph = PasswordHasher()
+
 users = {
     os.getenv("ADMIN_USER", "admin"): {
         "password": ph.hash(os.getenv("ADMIN_PASS", "admin123")),
@@ -117,7 +177,7 @@ users = {
     }
 }
 
-# --- DEMO USERS DESDE ENV ---
+# demo users desde env (JSON)
 try:
     demo_users_env = os.getenv("DEMO_USERS", "[]")
     demo_users = json.loads(demo_users_env)
@@ -129,7 +189,6 @@ try:
 except Exception as e:
     print(f"[WARN] No se pudieron cargar demo_users: {e}")
 
-# --- LOGIN MANAGER ---
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
@@ -144,7 +203,9 @@ def load_user(user_id):
         return Usuario(user_id, users[user_id]['role'])
     return None
 
-# --- RUTAS ---
+# ---------------------------
+# RUTAS / ENDPOINTS HTTP
+# ---------------------------
 @app.route('/')
 def home():
     if current_user.is_authenticated:
@@ -152,7 +213,7 @@ def home():
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("5/minute; 20/hour")  # fuerza bruta
+@limiter.limit("5/minute; 20/hour")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('inicio'))
@@ -169,7 +230,6 @@ def login():
             except Exception:
                 pass
 
-        # mensaje genérico: no reveles si el usuario existe
         return render_template("login.html", error="Credenciales inválidas.")
     return render_template("login.html")
 
@@ -183,13 +243,6 @@ def logout():
 @login_required
 def inicio():
     return render_template('inicio.html', current_user=current_user)
-
-# --- FUNCIONALIDAD DE ARCHIVOS ---
-ALLOWED_EXTENSIONS = {'.txt', '.pdf', '.png', '.jpg', '.jpeg', '.gif'}
-
-def allowed_file(filename: str) -> bool:
-    _, ext = os.path.splitext(filename.lower())
-    return ext in ALLOWED_EXTENSIONS
 
 @app.route('/subir', methods=['GET', 'POST'])
 @login_required
@@ -211,7 +264,6 @@ def subir():
         return redirect(url_for('listar'))
     return render_template("subir.html")
 
-
 @app.route('/listar')
 @login_required
 def listar():
@@ -223,7 +275,7 @@ def listar():
 def descargar(nombre):
     return send_from_directory(UPLOAD_FOLDER, nombre, as_attachment=True)
 
-@app.route('/eliminar/<nombre>', methods=['POST'])  # evita GET peligrosos
+@app.route('/eliminar/<nombre>', methods=['POST'])
 @login_required
 def eliminar(nombre):
     if current_user.rol != 'administrator':
@@ -238,19 +290,25 @@ def eliminar(nombre):
         pass
     return redirect(url_for('listar'))
 
-
 @app.route('/chat')
 @login_required
 def chat():
     return render_template('chat.html', current_user=current_user)
 
-# --- SOCKET.IO ---
+# ---------------------------
+# SOCKET.IO EVENTS
+# ---------------------------
 chat_rooms = {}
 
 @socketio.on('join')
 @limiter.limit("1/minute")
 def on_join(data):
-    username = current_user.id
+    # current_user debería venir vía cookie de sesión si SameSite y CORS correctos
+    username = getattr(current_user, "id", None)
+    if not username:
+        send({'msg': 'Usuario no autenticado.', 'type': 'error'})
+        return
+
     room_code = (data.get('room') or "")[:64]
     password = (data.get('password') or "")[:128]
     is_group = bool(data.get('is_group', False))
@@ -269,28 +327,28 @@ def on_join(data):
     join_room(room_code)
     send({'msg': f"👋 {username} se ha unido.", 'user': 'Servidor', 'is_group': is_group}, to=room_code)
 
-
 @socketio.on('leave')
 def on_leave(data):
-    username = current_user.id
-    room_code = data['room']
-    leave_room(room_code)
-    send({'msg': f"🚪 {username} ha salido.", 'user': 'Servidor'}, to=room_code)
+    username = getattr(current_user, "id", None) or "Anon"
+    room_code = data.get('room')
+    if room_code:
+        leave_room(room_code)
+        send({'msg': f"🚪 {username} ha salido.", 'user': 'Servidor'}, to=room_code)
 
 @socketio.on('message')
-@limiter.limit("1/minute")   # evita spam de mensajes
+@limiter.limit("1/minute")
 def handle_message(data):
-    username = current_user.id
+    username = getattr(current_user, "id", None) or "Anon"
     room = (data.get('room') or "")[:64]
     raw_msg = data.get('msg')
     msg = clean_text(raw_msg)
     is_group = bool(data.get('is_group', False))
 
-    # opcional: valida que el usuario esté realmente en esa room
-
     send({'msg': msg, 'user': username, 'is_group': is_group}, to=room)
 
-
+# ---------------------------
+# LOGGING & ERRORES
+# ---------------------------
 if not app.debug:
     handler = RotatingFileHandler('app.log', maxBytes=5_000_000, backupCount=3)
     handler.setLevel(logging.INFO)
@@ -306,24 +364,25 @@ def forbidden(e): return "Prohibido", 403
 def not_found(e): return "No encontrado", 404
 
 @app.errorhandler(500)
-def server_error(e): 
+def server_error(e):
     app.logger.exception("Error 500")
     return "Error del servidor", 500
+
 @login_manager.unauthorized_handler
 def unauthorized():
     return redirect(url_for('login'))
 
 def clean_text(s: str) -> str:
-    s = (s or "")[:2000]  # límite de tamaño de mensaje
+    s = (s or "")[:2000]
     return bleach.clean(s, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, protocols=ALLOWED_PROTOCOLS, strip=True)
 
-
-
-# --- INICIO ---
+# ---------------------------
+# ENTRYPOINTS
+# ---------------------------
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 10000))
     socketio.run(app, host='0.0.0.0', port=port)
 
-# 👉 Para gunicorn/render
+# para Gunicorn / Render / Railway
 application = app
 socketio_app = socketio
