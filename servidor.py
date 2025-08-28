@@ -120,6 +120,7 @@ def load_user(user_id):
 # --- RUTAS WEB (VISTAS) ---
 @app.get("/")
 def root():
+    print( "Hello from SocketIO")
     return {"status": "ok"}
 @app.route('/')
 def home():
@@ -287,7 +288,7 @@ if __name__ == '__main__':
     # Usar host='0.0.0.0' para que sea accesible en la red local.
     # El puerto 8000 es el principal. Otros servicios podrían correr en otros puertos
     # usando el concepto de 'administrador_hilos.py' si fuera necesario.
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8080))
     socketio.run(app, host='0.0.0.0', port=port)
 
 # 👇 agregado: esto es para gunicorn
