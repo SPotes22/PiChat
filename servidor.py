@@ -241,7 +241,7 @@ def chat():
 chat_rooms = {}
 
 @socketio.on('join')
-@limiter.limit("15/minute")
+@limiter.limit("1/minute")
 def on_join(data):
     username = current_user.id
     room_code = (data.get('room') or "")[:64]
