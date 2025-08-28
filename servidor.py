@@ -19,8 +19,6 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 '''
-
-
 # 👇 esto siempre va primero
 import eventlet
 eventlet.monkey_patch()
@@ -35,7 +33,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import bleach
 
-from flask import Flask, request, jsonify, redirect, url_for, send_from_directory, render_template
+from flask import Flask, request, redirect, url_for, send_from_directory, render_template
 from flask_socketio import SocketIO, join_room, leave_room, send
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_argon2 import Argon2
@@ -72,7 +70,10 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev_secret")
 app.config.update(
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
+    # El valor 'None' es necesario para que las cookies de sesión se envíen
+    # con los handshakes de websocket, si el cliente y el servidor están
+    # en dominios diferentes. 'Lax' puede causar problemas en este escenario.
+    SESSION_COOKIE_SAMESITE=None,
     REMEMBER_COOKIE_HTTPONLY=True,
     PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
     MAX_CONTENT_LENGTH=25 * 1024 * 1024,
@@ -154,7 +155,17 @@ for part in origins_env.split(","):
     if n:
         ALLOWED_ORIGINS.append(n)
 
-socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS)
+# Volvemos a 'manage_session=False' para evitar conflictos con Flask-Login.
+# La combinación de Flask-Login y Socket.IO es compleja, y esta configuración
+# es a menudo necesaria para que la sesión HTTP esté disponible en los
+# eventos de Socket.IO.
+socketio = SocketIO(app, cors_allowed_origins=ALLOWED_ORIGINS, manage_session=False)
+
+# Intentamos eximir SocketIO del CSRF (lo ideal es eximir la ruta /socket.io)
+try:
+    csrf.exempt(socketio)
+except Exception:
+    pass
 
 wss_origins = []
 for o in ALLOWED_ORIGINS:
@@ -203,11 +214,9 @@ def home():
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('inicio'))
-
     if request.method == 'POST':
         user = (request.form.get('usuario') or "")[:64]
         password = (request.form.get('clave') or "")[:256]
-
         if user in users:
             try:
                 ph.verify(users[user]['password'], password)
@@ -215,7 +224,6 @@ def login():
                 return redirect(url_for('inicio'))
             except Exception:
                 pass
-    
         return render_template("login.html", error="Credenciales inválidas.")
     return render_template("login.html")
 
@@ -236,16 +244,13 @@ def inicio():
 def subir():
     if current_user.rol == 'usuario':
         return 'No tienes permiso para subir archivos', 403
-
     if request.method == 'POST':
         f = request.files.get('archivo')
         if not f or f.filename == '':
             return 'No se seleccionó archivo', 400
-
         filename = secure_filename(f.filename)
         if not allowed_file(filename):
             return 'Tipo de archivo no permitido', 400
-
         f.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         return redirect(url_for('listar'))
     return render_template("subir.html")
@@ -289,11 +294,14 @@ chat_rooms = {}
 @socketio.on('join')
 @limiter.limit("1/minute")
 def on_join(data):
+    # Validar que el usuario esté autenticado. 'current_user' proviene de la cookie
+    # de sesión, que debe enviarse con el handshake de websocket.
     username = getattr(current_user, "id", None)
     if not username:
         send({'msg': 'Usuario no autenticado.', 'type': 'error'})
         return
 
+    # Validar que los datos existan.
     room_code = (data.get('room') or "")[:64]
     password = (data.get('password') or "")[:128]
     is_group = bool(data.get('is_group', False))
@@ -359,7 +367,7 @@ def unauthorized():
 
 def clean_text(s: str) -> str:
     s = (s or "")[:2000]
-    ALLOWED_TAGS = [] # Ya están definidas arriba, pero se repite en esta función.
+    ALLOWED_TAGS = []
     ALLOWED_ATTRS = {}
     ALLOWED_PROTOCOLS = ['http', 'https']
     return bleach.clean(s, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRS, protocols=ALLOWED_PROTOCOLS, strip=True)
