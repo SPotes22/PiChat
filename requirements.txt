@@ -32,7 +32,7 @@ gunicorn
 argon2-cffi
 python-dotenv
 eventlet
-flask
+flask_wtf
 flask-socketio
 flask-login
 flask-argon2
