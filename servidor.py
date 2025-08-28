@@ -60,6 +60,12 @@ def normalize_origin(o: str):
 # ---------------------------
 # CONFIG INICIAL
 # ---------------------------
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"]
+)
+
 ALLOWED_TAGS = []
 ALLOWED_ATTRS = {}
 ALLOWED_PROTOCOLS = ['http', 'https']
