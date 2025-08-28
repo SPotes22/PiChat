@@ -37,7 +37,7 @@ socketio = SocketIO(app, cors_allowed_origins="*")  # este es el server real
 # Se recomienda usar una variable de entorno para la clave secreta
 app.secret_key = os.environ.get("SECRET_KEY", "a-very-secret-key-for-dev") 
 argon2 = Argon2(app)
-socketio = SocketIO(app)
+#socketio = SocketIO(app)
 
 # --- CONFIGURACIÓN DE CARPETAS Y USUARIOS ---
 UPLOAD_FOLDER = './cuarentena'
@@ -120,7 +120,6 @@ def load_user(user_id):
 # --- RUTAS WEB (VISTAS) ---
 @app.get("/")
 def root():
-    print( "Hello from SocketIO")
     return {"status": "ok"}
 @app.route('/')
 def home():
@@ -288,7 +287,7 @@ if __name__ == '__main__':
     # Usar host='0.0.0.0' para que sea accesible en la red local.
     # El puerto 8000 es el principal. Otros servicios podrían correr en otros puertos
     # usando el concepto de 'administrador_hilos.py' si fuera necesario.
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 8000))
     socketio.run(app, host='0.0.0.0', port=port)
 
 # 👇 agregado: esto es para gunicorn
