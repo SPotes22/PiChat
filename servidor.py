@@ -76,7 +76,7 @@ app.config.update(
 # ---------------------------
 # ALLOWED ORIGINS: parsear desde env para no hardcodear paths
 # ---------------------------
-_default_origins = "https://pichat-k0bi.onrender.com,https://*.railway.app,http://localhost:5000"
+_default_origins = "https://pichat-k0bi.onrender.com,http://localhost:10000"
 origins_env = os.environ.get("ALLOWED_ORIGINS", _default_origins)
 ALLOWED_ORIGINS = []
 for part in origins_env.split(","):
@@ -215,6 +215,7 @@ def home():
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit("5/minute; 20/hour")
 def login():
+    
     if current_user.is_authenticated:
         return redirect(url_for('inicio'))
 
