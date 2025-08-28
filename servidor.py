@@ -290,4 +290,7 @@ if __name__ == '__main__':
 # 👇 agregado: esto es para gunicorn
 # le damos un alias 'app' que apunta a socketio
 app = socketio
+socketio = SocketIO(app, async_mode="eventlet")
+application = socketio  # Gunicorn usará esto
+
 
