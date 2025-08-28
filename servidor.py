@@ -60,6 +60,9 @@ def normalize_origin(o: str):
 # ---------------------------
 # CONFIG INICIAL
 # ---------------------------
+app = Flask(__name__)
+
+
 limiter = Limiter(
     get_remote_address,
     app=app,
@@ -70,7 +73,7 @@ ALLOWED_TAGS = []
 ALLOWED_ATTRS = {}
 ALLOWED_PROTOCOLS = ['http', 'https']
 
-app = Flask(__name__)
+
 # <<< CORRECCIÓN 1: Indicar a Flask que confíe en el proxy de Render.
 # Esto es VITAL para que Talisman y las cookies seguras funcionen en producción.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
