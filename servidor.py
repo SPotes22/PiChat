@@ -161,7 +161,7 @@ Talisman(
 @app.route('/')
 def home():
     if current_user.is_authenticated:
-        return redirect(url_for('inicio'))
+        return redirect(url_for('login'))
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
