@@ -156,7 +156,7 @@ def home():
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
-@Limiter.limit("5/minute; 20/hour")
+@limiter.limit("5/minute; 20/hour")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('inicio'))
