@@ -32,3 +32,11 @@ gunicorn
 argon2-cffi
 python-dotenv
 eventlet
+flask
+flask-socketio
+flask-login
+flask-argon2
+argon2-cffi
+gunicorn
+eventlet
+

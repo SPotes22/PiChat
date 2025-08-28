@@ -30,6 +30,7 @@ from argon2 import PasswordHasher
 
 # --- CONFIGURACIÓN INICIAL ---
 app = Flask(__name__)
+socketio = SocketIO(app, async_mode="eventlet")
 # Se recomienda usar una variable de entorno para la clave secreta
 app.secret_key = os.environ.get("SECRET_KEY", "a-very-secret-key-for-dev") 
 argon2 = Argon2(app)
@@ -283,6 +284,10 @@ if __name__ == '__main__':
     # Usar host='0.0.0.0' para que sea accesible en la red local.
     # El puerto 8000 es el principal. Otros servicios podrían correr en otros puertos
     # usando el concepto de 'administrador_hilos.py' si fuera necesario.
-    socketio.run(app, host='0.0.0.0', port=8000, debug=True)
-    port = int(os.environ.get("PORT", 8080))
-    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
+    port = int(os.environ.get("PORT", 8000))
+    socketio.run(app, host='0.0.0.0', port=port)
+
+# 👇 agregado: esto es para gunicorn
+# le damos un alias 'app' que apunta a socketio
+app = socketio
+
