@@ -319,3 +319,4 @@ if __name__ == '__main__':
 
 # 👉 Para gunicorn/render
 application = app
+socketio_app = socketio
