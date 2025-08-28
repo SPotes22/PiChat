@@ -244,4 +244,4 @@ if __name__ == '__main__':
 # para Gunicorn / Render / Railway
 application = app
 # No es necesario re-inicializar socketio aquí.
-# application = socketio
+application = socketio
