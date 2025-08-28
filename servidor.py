@@ -34,7 +34,7 @@ socketio = SocketIO(app, async_mode="eventlet")
 # Se recomienda usar una variable de entorno para la clave secreta
 app.secret_key = os.environ.get("SECRET_KEY", "a-very-secret-key-for-dev") 
 argon2 = Argon2(app)
-socketio = SocketIO(app)
+#socketio = SocketIO(app)
 
 # --- CONFIGURACIÓN DE CARPETAS Y USUARIOS ---
 UPLOAD_FOLDER = './cuarentena'
@@ -286,6 +286,7 @@ if __name__ == '__main__':
     # usando el concepto de 'administrador_hilos.py' si fuera necesario.
     port = int(os.environ.get("PORT", 8000))
     socketio.run(app, host='0.0.0.0', port=port)
+    socketio.run(app, host="0.0.0.0", port=8000)
 
 # 👇 agregado: esto es para gunicorn
 # le damos un alias 'app' que apunta a socketio

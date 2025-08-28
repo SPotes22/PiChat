@@ -39,4 +39,8 @@ flask-argon2
 argon2-cffi
 gunicorn
 eventlet
+flask
+flask-socketio
+gunicorn
+eventlet
 
