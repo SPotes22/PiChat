@@ -7,4 +7,5 @@ venv
 *.pyc
 ./cuarentena/*
 *.csv
+AutoCommit.py
 
