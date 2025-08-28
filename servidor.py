@@ -43,14 +43,21 @@ ALLOWED_ATTRS = {}
 ALLOWED_PROTOCOLS = ['http', 'https']
 
 app = Flask(__name__)
-CSRFProtect(app)
+#CSRFProtect(app)
+
+csrf = CSRFProtect()
+csrf.init_app(app)
+
+# Excluir sockets del CSRF
+csrf.exempt(socketio_app)
+
 #socketio = SocketIO(app, cors_allowed_origins="*")  # SocketIO envuelve a Flask
 app.secret_key = os.environ.get("SECRET_KEY") 
 
 app.config.update(
     SESSION_COOKIE_SECURE=True,       # solo por HTTPS
     SESSION_COOKIE_HTTPONLY=True,     # no accesible por JS
-    SESSION_COOKIE_SAMESITE="Lax",    # o "Strict" si no integras con otros dominios
+    SESSION_COOKIE_SAMESITE=None,    # o "Strict" si no integras con otros dominios
     REMEMBER_COOKIE_HTTPONLY=True,
     PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
     MAX_CONTENT_LENGTH=25 * 1024 * 1024,  # 25MB uploads
@@ -70,7 +77,7 @@ csp = {
     'img-src': "'self' data:",
     'style-src': "'self' 'unsafe-inline'",   # mejor sin 'unsafe-inline' si usas sólo archivos .css
     'script-src': "'self'",                   # sin inline scripts
-    'connect-src': "'self'",
+    'connect-src': "'self' wss://pichat-k0bi.onrender.com",
 }
 
 # Fuerza HTTPS + headers seguros
