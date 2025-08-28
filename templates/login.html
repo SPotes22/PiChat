@@ -17,8 +17,9 @@
 <body>
     <div class="login-container">
         <h1>PiChat Login</h1>
-        <form method="POST">
+        <form method="post" action="/login">
 	    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
             <input type="text" name="usuario" placeholder="Usuario" required>
             <input type="password" name="clave" placeholder="Contraseña" required>
             <button type="submit">Entrar</button>
