@@ -1,5 +1,7 @@
 .env
-/venv
+env
+env/
+venv/
 venv
 *.key
 *.sqlite3
@@ -11,3 +13,8 @@ AutoCommit.py
 check_files.py
 auditor
 auditor/
+review/
+node_modules/
+node_modules
+package.json
+

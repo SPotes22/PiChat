@@ -43,12 +43,14 @@ app.secret_key = os.environ.get("SECRET_KEY", "a-very-secret-key-for-dev")
 argon2 = Argon2(app)
 ph = PasswordHasher()
 
+print("configuracion inicial completada ...")
 
 # --- CONFIGURACIÓN DE CARPETAS ---
 UPLOAD_FOLDER = './cuarentena'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+print("verificacion de archivos demo ...")
 
 # --- USUARIOS BASE ---
 users = {
@@ -66,7 +68,8 @@ users = {
     }
 }
 
-
+print("usuarios base generados...")
+'''
 # --- DEMO USERS DESDE ENV ---
 try:
     demo_users_env = os.getenv("DEMO_USERS", "[]")
@@ -79,7 +82,8 @@ try:
 except Exception as e:
     print(f"[WARN] No se pudieron cargar demo_users: {e}")
 
-
+print("usuarios demo creados ....")
+'''
 # --- LOGIN MANAGER ---
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -95,7 +99,7 @@ class Usuario(UserMixin):
             return Usuario(user_id, users[user_id]['role'])
         return None
 
-
+print("login initializied... Starting app....")
 # --- RUTAS ---
 @app.route('/')
 def home():
@@ -120,7 +124,7 @@ def login():
         return render_template("login.html", error="Credenciales inválidas.")
     return render_template("login.html")
 
-@app.route('/logout')
+@app.route('/logout',methods=['GET','POST'])
 @login_required
 def logout():
     logout_user()
@@ -217,7 +221,7 @@ def handle_message(data):
 
 # --- INICIO ---
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 8080))
     socketio.run(app, host='0.0.0.0', port=port) # 👉 Para gunicorn/render
-
+    print(f"app running at host : 0.0.0.0 and port {port}")
 application = app
