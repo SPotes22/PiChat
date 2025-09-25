@@ -44,12 +44,12 @@ python server.py
 El sistema quedará disponible en:
 
 ```
-http://127.0.0.1:8000
+http://127.0.0.1:8080
 ```
 y accesible en red local:
 
 ```
-http://<TU_IP_LOCAL>:8000
+http://<TU_IP_LOCAL>:8080
 ```
 🔑 Roles y Accesos
 
@@ -118,3 +118,121 @@ Panel de administración para gestión de usuarios.
 Dockerización para despliegue rápido.
 
 💡 PiChat es un paso hacia un NAS + sistema de chat privado, simple y seguro para redes locales.
+
+Version OWASP:
+para mitigar fallos de arquitectura se opto por una solucion hibrida de modularidad. rutas no criticas en app.py
+
+resumen: 
+🎯 ¿POR QUÉ ESTO SÍ FUNCIONA?
+✅ No hay importaciones circulares - Las rutas están en app.py
+
+✅ Limiter se inicializa UNA vez al principio
+
+✅ Usamos los módulos que SÍ funcionan (seguridad, sanitización)
+
+✅ Mantenemos la lógica compleja modularizada
+
+✅ Las rutas simples quedan en app.py
+Detalles de implementacion:
+## 🔒 CUMPLIMIENTO OWASP TOP 10 2021
+
+### ✅ Protecciones Implementadas Según Estándares OWASP
+
+#### **A01:2021 - Broken Access Control**
+- ✅ Control de roles y permisos (admin, cliente, usuario)
+- ✅ Protección de rutas con `@login_required`
+- ✅ Validación de ownership en descargas/eliminaciones
+- ✅ Rate limiting por tipo de usuario
+
+#### **A02:2021 - Cryptographic Failures**
+- ✅ Hashing con **Argon2** (industry standard)
+- ✅ Contraseñas nunca en texto plano
+- ✅ Claves secretas desde variables de entorno
+- ✅ Cookies seguras con flags `HttpOnly`, `Secure`, `SameSite`
+
+#### **A03:2021 - Injection**
+- ✅ Sanitización centralizada de inputs
+- ✅ Prepared statements para logs (CSV seguro)
+- ✅ Validación de tipos y longitud
+- ✅ Escape de caracteres especiales en mensajes
+
+#### **A05:2021 - Security Misconfiguration**
+- ✅ Configuración segura por defecto
+- ✅ Headers CORS restrictivos
+- ✅ Logging de auditoría comprehensivo
+- ✅ Entornos separados (dev/prod)
+
+#### **A06:2021 - Vulnerable and Outdated Components**
+- ✅ Dependencias actualizadas y auditadas
+- ✅ Monitoreo de vulnerabilidades conocido
+- ✅ Stack tecnológico moderno y mantenido
+
+#### **A07:2021 - Identification and Authentication Failures**
+- ✅ Protección contra fuerza bruta (máx 5 intentos, bloqueo 15min)
+- ✅ Mecanismos de autenticación seguros
+- ✅ Gestión segura de sesiones
+- ✅ Logout completo y seguro
+
+### 🛡️ **Características de Seguridad Adicionales**
+
+#### **Protección Contra DoS**
+
+```python
+# Rate limiting por IP y usuario
+limiter = Limiter(default_limits=["200 per day", "50 per hour"])
+@limiter.limit("5 per minute")  # Subida archivos
+@limiter.limit("10 per minute") # Descargas
+@limiter.limit("3 per minute")  # Eliminación
+```
+
+## Seguridad en Tiempo Real (WebSockets)
+✅ Autenticación SocketIO con middleware
+
+✅ Rate limiting por conexión WebSocket
+
+✅ Sanitización de mensajes en tiempo real
+
+✅ Validación de salas con Argon2
+
+## Auditoría y Logging
+
+```
+python
+# Logger concurrente con buffer
+logger = AdvancedLogger(
+    logs_dir='./logs',
+    max_file_size_mb=10,
+    buffer_size=100  # Optimizado para alta carga
+)
+```
+
+## Protección de Archivos
+✅ Sanitización de nombres con secure_filename()
+
+✅ Cuarentena de archivos subidos
+
+✅ Validación de tipos MIME implícita
+
+✅ Límite de tamaño (16MB por archivo)
+
+
+📊 Métricas de Seguridad
+
+Categoría	Nivel de Protección	Implementación
+Autenticación	🔒🔒🔒🔒🔒	Argon2 + Fuerza Bruta
+Autorización	🔒🔒🔒🔒🔒	RBAC + Middleware
+Validación Input	🔒🔒🔒🔒○	Sanitización centralizada
+Protección DoS	🔒🔒🔒🔒○	Rate Limiting multi-nivel
+Auditoría	🔒🔒🔒🔒🔒	Logger con buffer y rotación
+## 🚀 Hardening Adicional
+
+```
+bash
+# Variables de entorno críticas
+SECRET_KEY=tu_clave_super_secreta_aqui
+ADMIN_PASS=contraseña_compleja_admin
+ALLOWED_ORIGINS=https://tudominio.com
+DEBUG=False  # En producción
+```
+
+
