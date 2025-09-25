@@ -43,8 +43,7 @@ def load_users_from_env():
                 "failed_attempts": 0,
                 "last_attempt": None
             }
-    
-    print(f"✅ Usuarios convertidos: {list(users.keys())}")
+        print(f"✅ Usuarios convertidos: {list(users.keys())}")
     
     except Exception as e:
         print(f"❌ Error convirtiendo usuarios: {e}")
