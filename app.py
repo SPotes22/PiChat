@@ -38,6 +38,12 @@ from src.utils.input_sanitizer import (
     sanitize_input, sanitize_filename, 
     sanitize_message, sanitize_room_code
 )
+# Añadir esto al principio del archivo, después de los imports
+print("=== DEBUG ENVIRONMENT ===")
+print(f"USERS_JSON_LAST exists: {'USERS_JSON_LAST' in os.environ}")
+print(f"USERS_JSON_LAST length: {len(os.getenv('USERS_JSON_LAST', ''))}")
+print(f"USERS_JSON_LAST value: {os.getenv('USERS_JSON_LAST', 'EMPTY')[:100]}...")  # Primeros 100 chars
+print("=========================")
 
 # --- CONFIGURACIÓN INICIAL ---
 UPLOAD_FOLDER = './cuarentena'
@@ -93,7 +99,7 @@ print("Configuración de seguridad inicial completada ...")
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # --- CONFIGURACIÓN DE USUARIOS DEMO - CORREGIDA ---
-def load_users_from_env():
+def load_users_from_env_base():
     """Cargar usuarios desde variable de entorno JSON - VERSIÓN CORREGIDA"""
     users_json = os.getenv("USERS_JSON_LAST", "[]")
     
@@ -142,6 +148,81 @@ def load_users_from_env():
         }
         print(f"✅ Usuarios por defecto cargados: {list(users_dict.keys())}")
         return users_dict
+
+def load_users_from_env():
+    """Cargar usuarios desde variable de entorno JSON - CON FALLBACK DE EMERGENCIA"""
+    users_json = os.getenv("USERS_JSON_LAST", "[]")
+    
+    print(f"🔍 DEBUG: Raw USERS_JSON_LAST = {users_json}")
+    
+    try:
+        users_list = json.loads(users_json)
+        users_dict = {}
+        
+        for user in users_list:
+            username = user.get('username')
+            password = user.get('password')
+            role = user.get('role', 'usuario')
+            
+            if username and password:
+                users_dict[username] = {
+                    "password": ph.hash(password),
+                    "role": role,
+                    "failed_attempts": 0,
+                    "last_attempt": None
+                }
+        
+        # ✅ FALLBACK DE EMERGENCIA SI NO HAY USUARIOS
+        if not users_dict:
+            print("⚠️  No users found in JSON, creating emergency users...")
+            users_dict = {
+                "admin": {
+                    "password": ph.hash("admin123"),
+                    "role": "administrator",
+                    "failed_attempts": 0,
+                    "last_attempt": None
+                },
+                "cliente": {
+                    "password": ph.hash("cliente123"),
+                    "role": "cliente", 
+                    "failed_attempts": 0,
+                    "last_attempt": None
+                },
+                "usuario": {
+                    "password": ph.hash("usuario123"),
+                    "role": "usuario",
+                    "failed_attempts": 0, 
+                    "last_attempt": None
+                },
+                # ✅ AÑADIR USUARIOS DE TU LISTA MANUALMENTE
+                "arachne": {
+                    "password": ph.hash("Um4.PqN+_?7s"),
+                    "role": "admin",
+                    "failed_attempts": 0,
+                    "last_attempt": None
+                },
+                "demo1": {
+                    "password": ph.hash("demo1pass"),
+                    "role": "usuario",
+                    "failed_attempts": 0,
+                    "last_attempt": None
+                }
+            }
+        
+        print(f"✅ Usuarios finales cargados: {list(users_dict.keys())}")
+        return users_dict
+        
+    except Exception as e:
+        print(f"❌ Error cargando usuarios JSON: {e}")
+        # Fallback más robusto
+        users_dict = {
+            "admin": {"password": ph.hash("admin123"), "role": "administrator", "failed_attempts": 0, "last_attempt": None},
+            "usuario": {"password": ph.hash("usuario123"), "role": "usuario", "failed_attempts": 0, "last_attempt": None},
+            "arachne": {"password": ph.hash("Um4.PqN+_?7s"), "role": "admin", "failed_attempts": 0, "last_attempt": None}
+        }
+        print(f"✅ Usuarios de emergencia cargados: {list(users_dict.keys())}")
+        return users_dict
+
 
 # --- USUARIOS CARGADOS CORRECTAMENTE ---
 users = load_users_from_env()
@@ -353,6 +434,34 @@ def eliminar(nombre):
     except FileNotFoundError:
         pass
     return redirect(url_for('listar'))
+
+@app.route('/emergency-setup')
+def emergency_setup():
+    """Ruta temporal para crear usuarios de emergencia"""
+    global users
+    
+    # Crear usuarios manualmente
+    emergency_users = {
+        "admin": {"password": ph.hash("admin123"), "role": "administrator"},
+        "usuario": {"password": ph.hash("usuario123"), "role": "usuario"},
+        "arachne": {"password": ph.hash("Um4.PqN+_?7s"), "role": "admin"},
+        "demo1": {"password": ph.hash("demo1pass"), "role": "usuario"}
+    }
+    
+    # Actualizar el diccionario global
+    for username, data in emergency_users.items():
+        users[username] = {
+            "password": data["password"],
+            "role": data["role"],
+            "failed_attempts": 0,
+            "last_attempt": None
+        }
+    
+    return jsonify({
+        "message": "Usuarios de emergencia creados",
+        "users": list(users.keys())
+    })
+
 
 @app.route('/chat')
 @login_required
