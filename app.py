@@ -30,38 +30,39 @@ import json
 users_json = os.getenv("USERS_JSON_LAST", "[]")
 
 # Convertir lista de diccionarios a diccionario de diccionarios
-try:
-    users_list = json.loads(users_json)
-    users = {}
+def load_users_from_env():
+    try:
+        users_list = json.loads(users_json)
+        users = {}
     
-    for user in users_list:
-        username = user['username']
-        users[username] = {
-            "password": ph.hash(user['password']),  # ✅ IMPORTANTE: Hashear!
-            "role": user['role'],
-            "failed_attempts": 0,
-            "last_attempt": None
-        }
+        for user in users_list:
+            username = user['username']
+            users[username] = {
+                "password": ph.hash(user['password']),  # ✅ IMPORTANTE: Hashear!
+                "role": user['role'],
+                "failed_attempts": 0,
+                "last_attempt": None
+            }
     
     print(f"✅ Usuarios convertidos: {list(users.keys())}")
     
-except Exception as e:
-    print(f"❌ Error convirtiendo usuarios: {e}")
-    # Fallback a usuarios básicos
-    users = {
-        "admin": {
+    except Exception as e:
+        print(f"❌ Error convirtiendo usuarios: {e}")
+        # Fallback a usuarios básicos
+        users = {
+            "admin": {
             "password": ph.hash("admin123"),
             "role": "administrator",
             "failed_attempts": 0,
             "last_attempt": None
-        },
-        "usuario": {
+            },
+            "usuario": {
             "password": ph.hash("usuario123"), 
             "role": "usuario",
             "failed_attempts": 0,
             "last_attempt": None
+         }
         }
-    }
 # --- USUARIOS CARGADOS CORRECTAMENTE ---
 users = load_users_from_env()
 
