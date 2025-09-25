@@ -1,0 +1,117 @@
+# src/routes/auth_routes.py
+from flask import Blueprint, request, render_template, redirect, url_for
+from flask_login import login_user, logout_user, current_user
+from flask_limiter import Limiter
+
+from src.utils.security import (
+    check_brute_force_protection, 
+    increment_failed_attempt, 
+    reset_failed_attempts
+)
+
+auth_bp = Blueprint('auth', __name__)
+
+# Variables globales que se inicializarán
+users = {}
+logger = None
+limiter = None  # Ahora será un objeto Limiter real
+ph = None
+
+def init_auth_routes(users_dict, logger_instance, limiter_instance, password_hasher):
+    """Inicializar dependencias de las rutas de auth"""
+    global users, logger, limiter, ph
+    users = users_dict
+    logger = logger_instance
+    limiter = limiter_instance  # ✅ Ahora recibe el limiter ya inicializado
+    ph = password_hasher
+
+# ✅ CORREGIDO: Usar el limiter a través del blueprint
+@auth_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    # Aplicar rate limiting manualmente ya que no podemos usar el decorator directamente
+    if limiter:
+        # Verificar rate limit manualmente
+        with app.test_request_context(path='/login', method='POST' if request.method == 'POST' else 'GET'):
+            if not limiter._check_request_limit(limiter._get_limiter_args()):
+                return render_template("login.html", error="Demasiadas solicitudes. Intente más tarde.")
+    
+    if current_user.is_authenticated:
+        logger.log_archivo(
+            usuario=current_user.id,
+            accion='LOGIN_REDIRECT_ALREADY_AUTH',
+            nombre_archivo='server_hist.csv',
+            tamano=0
+        )
+        return redirect(url_for('chat.inicio'))
+
+    if request.method == 'POST':
+        user = request.form['usuario']
+        password = request.form['clave']
+        
+        # Protección fuerza bruta
+        if check_brute_force_protection(user, users):
+            logger.log_archivo(
+                usuario=user,
+                accion='LOGIN_BLOCKED_BRUTE_FORCE',
+                nombre_archivo='server_hist.csv',
+                tamano=-1
+            )
+            return render_template("login.html", 
+                                error="Demasiados intentos fallidos. Espere 15 minutos.")
+        
+        if user in users:
+            try:
+                ph.verify(users[user]['password'], password)
+                # Reseteo de intentos al éxito
+                reset_failed_attempts(user, users)
+                
+                from app_refactored import Usuario  # Importar desde el archivo principal
+                login_user(Usuario(user, users[user]['role']))
+                
+                logger.log_archivo(
+                    usuario=user,
+                    accion='LOGIN_EXITOSO',
+                    nombre_archivo='server_hist.csv',
+                    tamano=0
+                )
+                return redirect(url_for('chat.inicio'))
+            except Exception as e:
+                # Incremento de intentos fallidos
+                increment_failed_attempt(user, users)
+                
+                logger.log_archivo(
+                    usuario=user,
+                    accion=f'LOGIN_FALLIDO_ATTEMPT_{users[user]["failed_attempts"]}',
+                    nombre_archivo='server_hist.csv',
+                    tamano=-1
+                )
+        else:
+            logger.log_archivo(
+                usuario=user,
+                accion='LOGIN_USUARIO_NO_EXISTE',
+                nombre_archivo='server_hist.csv',
+                tamano=-1
+            )
+            
+        return render_template("login.html", error="Credenciales inválidas.")
+    return render_template("login.html")
+
+@auth_bp.route('/logout', methods=['GET','POST'])
+def logout():
+    logger.log_archivo(
+        usuario=current_user.id,
+        accion='USER LOG OUT - EXITED SESSION - SUCCESS',
+        nombre_archivo='user_hist.csv',
+        tamano=0
+    )
+    logout_user()
+    return redirect(url_for('auth.login'))
+
+# ✅ ALTERNATIVA: Aplicar rate limiting a nivel de blueprint
+def apply_rate_limits():
+    """Aplicar rate limits a todas las rutas del blueprint"""
+    limiter.limit("10 per minute")(login)
+
+# Llamar esta función después de inicializar
+def setup_rate_limits():
+    apply_rate_limits()
