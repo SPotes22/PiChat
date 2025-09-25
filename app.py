@@ -4,6 +4,12 @@ Copyright (C) 2025 Santiago Potes Giraldo
 '''
 import os
 import json
+'''
+PiChat - Chat Corporativo - VERSIÓN HÍBRIDA FUNCIONAL
+Copyright (C) 2025 Santiago Potes Giraldo
+'''
+import os
+import json
 from datetime import datetime
 from argon2 import PasswordHasher
 from src.services.logger_service import AdvancedLogger
@@ -20,52 +26,6 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-
-# configuracion de usuarios demo
-# --- HOTFIX TEMPORAL: Convertir tu JSON a la estructura nueva ---
-import json
-
-# Tu environment variable actual
-
-users_json = os.getenv("USERS_JSON_LAST", "[]")
-
-# Convertir lista de diccionarios a diccionario de diccionarios
-def load_users_from_env():
-    try:
-        users_list = json.loads(users_json)
-        users = {}
-    
-        for user in users_list:
-            username = user['username']
-            users[username] = {
-                "password": ph.hash(user['password']),  # ✅ IMPORTANTE: Hashear!
-                "role": user['role'],
-                "failed_attempts": 0,
-                "last_attempt": None
-            }
-        print(f"✅ Usuarios convertidos: {list(users.keys())}")
-    
-    except Exception as e:
-        print(f"❌ Error convirtiendo usuarios: {e}")
-        # Fallback a usuarios básicos
-        users = {
-            "admin": {
-            "password": ph.hash("admin123"),
-            "role": "administrator",
-            "failed_attempts": 0,
-            "last_attempt": None
-            },
-            "usuario": {
-            "password": ph.hash("usuario123"), 
-            "role": "usuario",
-            "failed_attempts": 0,
-            "last_attempt": None
-         }
-        }
-# --- USUARIOS CARGADOS CORRECTAMENTE ---
-users = load_users_from_env()
-
-print(f"✅ Usuarios cargados: {list(users.keys())}")
 
 # ✅ IMPORTAR MÓDULOS QUE SÍ FUNCIONAN
 from src.utils.security import (
@@ -132,27 +92,61 @@ print("Configuración de seguridad inicial completada ...")
 # --- CARPETA UPLOADS ---
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# --- USUARIOS BASE ---
-users = {
-    os.getenv("ADMIN_USER", "admin"): {
-        "password": ph.hash(os.getenv("ADMIN_PASS", "admin123")),
-        "role": "administrator",
-        "failed_attempts": 0,
-        "last_attempt": None
-    },
-    os.getenv("CLIENT_USER", "cliente"): {
-        "password": ph.hash(os.getenv("CLIENT_PASS", "cliente123")),
-        "role": "cliente", 
-        "failed_attempts": 0,
-        "last_attempt": None
-    },
-    os.getenv("USR_USER", "usuario"): {
-        "password": ph.hash(os.getenv("USR_PASS", "usuario123")),
-        "role": "usuario",
-        "failed_attempts": 0, 
-        "last_attempt": None
-    }
-}
+# --- CONFIGURACIÓN DE USUARIOS DEMO - CORREGIDA ---
+def load_users_from_env():
+    """Cargar usuarios desde variable de entorno JSON - VERSIÓN CORREGIDA"""
+    users_json = os.getenv("USERS_JSON_LAST", "[]")
+    
+    try:
+        users_list = json.loads(users_json)
+        users_dict = {}
+        
+        for user in users_list:
+            username = user.get('username')
+            password = user.get('password')
+            role = user.get('role', 'usuario')
+            
+            if username and password:
+                users_dict[username] = {
+                    "password": ph.hash(password),  # ✅ Hashear la contraseña
+                    "role": role,
+                    "failed_attempts": 0,
+                    "last_attempt": None
+                }
+        
+        print(f"✅ Usuarios convertidos desde JSON: {list(users_dict.keys())}")
+        return users_dict
+        
+    except Exception as e:
+        print(f"❌ Error cargando usuarios JSON: {e}")
+        # Fallback a usuarios básicos
+        users_dict = {
+            "admin": {
+                "password": ph.hash(os.getenv("ADMIN_PASS", "admin123")),
+                "role": "administrator",
+                "failed_attempts": 0,
+                "last_attempt": None
+            },
+            "cliente": {
+                "password": ph.hash(os.getenv("CLIENT_PASS", "cliente123")),
+                "role": "cliente", 
+                "failed_attempts": 0,
+                "last_attempt": None
+            },
+            "usuario": {
+                "password": ph.hash(os.getenv("USR_PASS", "usuario123")),
+                "role": "usuario",
+                "failed_attempts": 0, 
+                "last_attempt": None
+            }
+        }
+        print(f"✅ Usuarios por defecto cargados: {list(users_dict.keys())}")
+        return users_dict
+
+# --- USUARIOS CARGADOS CORRECTAMENTE ---
+users = load_users_from_env()
+
+print(f"✅ Total de usuarios cargados: {len(users)}")
 
 # ✅ CONFIGURAR PROTECCIÓN FUERZA BRUTA (MÓDULO FUNCIONAL)
 setup_brute_force_protection(users)
@@ -245,6 +239,9 @@ def login():
             
         return render_template("login.html", error="Credenciales inválidas.")
     return render_template("login.html")
+
+# ... (el resto del código IGUAL, no lo cambio para no hacerlo más largo)
+
 
 @app.route('/logout', methods=['GET','POST'])
 @login_required
@@ -468,3 +465,4 @@ if __name__ == '__main__':
                 debug=os.getenv('DEBUG', 'False').lower() == 'true')
 
 application = app
+
