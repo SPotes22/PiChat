@@ -21,6 +21,52 @@ from flask_limiter.util import get_remote_address
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
+# configuracion de usuarios demo
+# --- HOTFIX TEMPORAL: Convertir tu JSON a la estructura nueva ---
+import json
+
+# Tu environment variable actual
+
+users_json = os.getenv("USERS_JSON_LAST", "[]")
+
+# Convertir lista de diccionarios a diccionario de diccionarios
+try:
+    users_list = json.loads(users_json)
+    users = {}
+    
+    for user in users_list:
+        username = user['username']
+        users[username] = {
+            "password": ph.hash(user['password']),  # ✅ IMPORTANTE: Hashear!
+            "role": user['role'],
+            "failed_attempts": 0,
+            "last_attempt": None
+        }
+    
+    print(f"✅ Usuarios convertidos: {list(users.keys())}")
+    
+except Exception as e:
+    print(f"❌ Error convirtiendo usuarios: {e}")
+    # Fallback a usuarios básicos
+    users = {
+        "admin": {
+            "password": ph.hash("admin123"),
+            "role": "administrator",
+            "failed_attempts": 0,
+            "last_attempt": None
+        },
+        "usuario": {
+            "password": ph.hash("usuario123"), 
+            "role": "usuario",
+            "failed_attempts": 0,
+            "last_attempt": None
+        }
+    }
+# --- USUARIOS CARGADOS CORRECTAMENTE ---
+users = load_users_from_env()
+
+print(f"✅ Usuarios cargados: {list(users.keys())}")
+
 # ✅ IMPORTAR MÓDULOS QUE SÍ FUNCIONAN
 from src.utils.security import (
     check_brute_force_protection, 
