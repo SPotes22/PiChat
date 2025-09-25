@@ -17,4 +17,16 @@ review/
 node_modules/
 node_modules
 package.json
+.secret
+secret
+secrets
+secret/
+secrets/
+.csv
 
+secret
+secrets
+secret/
+secrets/
+.csv
+.pkl
