@@ -20,10 +20,10 @@ package.json
 .secret
 secret
 secrets
-secret/
-secrets/
+secret/*
+secrets/*
 .csv
-
+secrets/*
 secret
 secrets
 secret/
